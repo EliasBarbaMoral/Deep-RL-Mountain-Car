@@ -3,7 +3,8 @@ import numpy as np
 from keras.models import Sequential
 from keras.layers.core import Dense
 from keras.optimizers import sgd
-from MountainCar import MountainCar
+#from MountainCar import MountainCar
+import gym 
 
 class ExperienceReplay(object):
     def __init__(self, max_memory=100, discount=.9):
@@ -67,7 +68,7 @@ if __name__ == "__main__":
     # model.load_weights("model.h5")
 
     # Define environment/game
-    env = MountainCar(start, goal, Xrange, Vrange)
+    env = gym.make('MountainCar-v0')
 
     # Initialize experience replay object
     exp_replay = ExperienceReplay(max_memory=max_memory)
@@ -76,34 +77,38 @@ if __name__ == "__main__":
     win_cnt = 0
     for e in range(epoch):
         loss = 0.
-        env.reset()
-        game_over = False
+        done = False
         # get initial input
-        input_t = env.observe()
-
+        input_t = env.reset()
+        input_t = np.array([input_t[0],input_t[1]]).reshape((1,-1))
         step = 0
-        while (not game_over):
+        while (not done):
+            env.render()
             input_tm1 = input_t
             step += 1
             # get next action
             if np.random.rand() <= epsilon:
-                action = np.random.randint(0, num_actions, size=1)
+                action = np.random.randint(0, num_actions, size=1)[0]
             else:
                 q = model.predict(input_tm1)
                 action = np.argmax(q[0])
 
             # apply action, get rewards and new state
-            input_t, reward, game_over = env.act(action)
-            if reward == 100:
+            input_t, reward, done, info = env.step(action)
+            
+            if input_t[0] >= -0.5:
+                reward += (input_t[0] + 1.5)**2
+            if input_t[0] >=0.5:
                 win_cnt += 1
 
+            input_t = input_t.reshape((1,-1))
             # store experience
-            exp_replay.remember([input_tm1, action, reward, input_t], game_over)
+            exp_replay.remember([input_tm1, action, reward, input_t], done)
 
             # adapt model
             inputs, targets = exp_replay.get_batch(model, batch_size=batch_size)
 
-            loss += model.train_on_batch(inputs, targets)[0]
+            loss += model.train_on_batch(inputs, targets)
         print("Step {} Epoch {:03d}/999 | Loss {:.4f} | Win count {}".format(step, e, loss, win_cnt))
 
     # Save trained model weights and architecture, this will be used by the visualization code
